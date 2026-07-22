@@ -10,7 +10,11 @@ from .fetcher import (
     fetch_run_accessions_for_bioproject,
     has_fastq_dump,
 )
-from .logger import configure_file_logger, log_batch_summary
+from .logger import (
+    configure_file_logger,
+    log_batch_summary,
+    read_failed_accessions,
+)
 from .readers import read_sample_accessions
 from .utils import ensure_directory
 
@@ -69,9 +73,14 @@ DOWNLOAD_OPTION = typer.Option(
     "--download/--no-download",
     help="Baixa automaticamente cada SRR encontrada após listar o BioProject.",
 )
+LOG_FILE_OPTION = typer.Option(
+    None,
+    "--log-file",
+    help="Caminho do arquivo de log usado para reprocessar apenas as falhas.",
+)
 
 
-@app.command()
+@app.command("download-unico")
 def download(
     accession: str = ACCESSION_ARG,
     outdir: Path = OUTDIR_OPTION,
@@ -80,7 +89,7 @@ def download(
 ):
     """Baixa FASTQ para uma accession única usando ENA ou fastq-dump."""
     outdir = ensure_directory(outdir)
-    logger = configure_file_logger(outdir / DEFAULT_LOG_FILENAME)
+    logger = configure_file_logger(outdir / DEFAULT_LOG_FILENAME, append=True)
     logger.info(
         "START accession=%s backend=%s zip_output=%s",
         accession,
@@ -119,6 +128,13 @@ def resolve_bioproject(
 ):
     """Resolve um BioProject em uma lista de SRRs via API da ENA."""
     outdir = ensure_directory(outdir)
+    logger = configure_file_logger(outdir / DEFAULT_LOG_FILENAME, append=True)
+    logger.info(
+        "START resolve_bioproject accession=%s backend=%s zip_output=%s",
+        bioproject,
+        backend,
+        zip_output,
+    )
     try:
         run_accessions = fetch_run_accessions_for_bioproject(bioproject)
     except Exception as error:
@@ -145,6 +161,7 @@ def resolve_bioproject(
                 sample_dir,
                 backend=backend,
                 zip_output=zip_output,
+                logger=logger,
             )
             success_count += 1
         except Exception as error:
@@ -155,7 +172,7 @@ def resolve_bioproject(
     )
 
 
-@app.command("batch")
+@app.command("download")
 def batch(
     table: Path = TABLE_ARGUMENT,
     accession_column: str = ACCESSION_COLUMN_OPTION,
@@ -165,7 +182,7 @@ def batch(
 ):
     """Lê uma tabela de amostras e baixa FASTQs para todas as accessions presentes."""
     outdir = ensure_directory(outdir)
-    logger = configure_file_logger(outdir / DEFAULT_LOG_FILENAME)
+    logger = configure_file_logger(outdir / DEFAULT_LOG_FILENAME, append=True)
     logger.info(
         "START batch table=%s backend=%s zip_output=%s",
         table.name,
@@ -210,6 +227,55 @@ def batch(
     log_batch_summary(logger, len(accessions), success_count, failed_count)
     console.print(
         f"\n[bold green]✔ Batch concluído: {success_count}/{len(accessions)} accessions baixadas com sucesso.[/bold green]"
+    )
+
+
+@app.command("retry-failures")
+def retry_failed_accessions(
+    outdir: Path = OUTDIR_OPTION,
+    backend: str = BACKEND_OPTION,
+    zip_output: bool = ZIP_OUTPUT_OPTION,
+    log_path: Path | None = LOG_FILE_OPTION,
+):
+    """Reprocessa apenas as accessions marcadas como falha no log de execução."""
+    outdir = ensure_directory(outdir)
+    log_file = log_path or outdir / DEFAULT_LOG_FILENAME
+    try:
+        failed_accessions = read_failed_accessions(log_file)
+    except FileNotFoundError as error:
+        console.print(f"[bold red]Erro:[/bold red] {error}")
+        raise typer.Exit(code=1) from None
+
+    if not failed_accessions:
+        console.print("[bold yellow]Nenhuma falha encontrada no log para reprocessar.[/bold yellow]")
+        return
+
+    logger = configure_file_logger(log_file, append=True)
+    logger.info(
+        "RETRY start backend=%s zip_output=%s failed_count=%d",
+        backend,
+        zip_output,
+        len(failed_accessions),
+    )
+
+    success_count = 0
+    for accession, _previous_backend in failed_accessions:
+        sample_dir = ensure_directory(outdir / accession)
+        console.print(f"[bold blue]🔁 Reprocessando {accession}...[/bold blue]")
+        try:
+            download_accession(
+                accession,
+                sample_dir,
+                backend=backend,
+                zip_output=zip_output,
+                logger=logger,
+            )
+            success_count += 1
+        except Exception as error:
+            console.print(f"[bold red]Falha para {accession}:[/bold red] {error}")
+
+    console.print(
+        f"[bold green]✔ Reprocessamento concluído: {success_count}/{len(failed_accessions)} accessions recuperadas.[/bold green]"
     )
 
 
