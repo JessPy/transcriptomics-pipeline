@@ -20,31 +20,31 @@ poetry install
 Download de uma accession única via ENA:
 
 ```bash
-poetry run transcriptomics-pipeline download SRR12345678 -o data/raw
+poetry run transcriptomics-pipeline download-unico SRR12345678 -o data/raw
 ```
 
-Batch com arquivo de amostras:
+Download em lote com arquivo de amostras:
 
 ```bash
-poetry run transcriptomics-pipeline batch amostras.csv --accession-column "Sample Accession" -o data/raw
+poetry run transcriptomics-pipeline download amostras.csv --accession-column "Sample Accession" -o data/raw
 ```
 
 Usando `fastq-dump` como backend:
 
 ```bash
-poetry run transcriptomics-pipeline download SRR12345678 --backend fastq-dump -o data/raw
+poetry run transcriptomics-pipeline download-unico SRR12345678 --backend fastq-dump -o data/raw
 ```
 
 Compactando o resultado em um `.zip` automaticamente:
 
 ```bash
-poetry run transcriptomics-pipeline download SRR12345678 -o data/raw --zip-output
+poetry run transcriptomics-pipeline download-unico SRR12345678 -o data/raw --zip-output
 ```
 
 Para manter os arquivos sem zip, use:
 
 ```bash
-poetry run transcriptomics-pipeline download SRR12345678 -o data/raw --no-zip-output
+poetry run transcriptomics-pipeline download-unico SRR12345678 -o data/raw --no-zip-output
 ```
 
 Logs de amostras são gerados em `data/raw/sample_log.txt` por padrão. O arquivo contém:
@@ -62,6 +62,16 @@ poetry run transcriptomics-pipeline resolve-bioproject PRJNA123456 -o data/raw -
 ```
 
 Esse comando salva uma lista de runs em `data/raw/PRJNA123456_runs.txt` e, com `--download`, já inicia o download de cada SRR encontrado em uma pasta própria.
+
+## Reprocessar apenas as falhas
+
+Se alguma amostra falhar em uma execução anterior, você pode repetir apenas os itens marcados como falha no log:
+
+```bash
+poetry run transcriptomics-pipeline retry-failures -o data/raw --backend fastq-dump
+```
+
+Esse comando lê o arquivo de log padrão `data/raw/sample_log.txt`, identifica as accessions com falha e tenta baixar somente elas novamente. Se você quiser trocar o backend da tentativa, basta passar `--backend ena` ou `--backend fastq-dump`.
 
 ## Siglas do SRA
 
