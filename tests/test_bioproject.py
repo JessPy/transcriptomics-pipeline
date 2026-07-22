@@ -1,6 +1,6 @@
 import httpx
 
-from transcriptomics_pipeline.cli import resolve_bioproject
+from transcriptomics_pipeline.cli import resolve_bioproject, retry_failed_accessions
 from transcriptomics_pipeline.fetcher import fetch_run_accessions_for_bioproject
 
 
@@ -47,4 +47,38 @@ def test_resolve_bioproject_downloads_runs(monkeypatch, tmp_path):
     assert calls == [
         ("SRR000001", tmp_path / "SRR000001", "ena", False),
         ("SRR000002", tmp_path / "SRR000002", "ena", False),
+    ]
+
+
+def test_retry_failed_accessions_uses_only_failures(monkeypatch, tmp_path):
+    log_path = tmp_path / "sample_log.txt"
+    log_path.write_text(
+        "INFO START accession=SRR000001 backend=ena zip_output=False\n"
+        "ERROR FAIL accession=SRR000001 backend=ena error=boom\n"
+        "INFO SUCCESS accession=SRR000002 backend=ena path=/tmp/SRR000002.fastq size=10 bytes\n"
+        "ERROR FAIL accession=SRR000003 backend=ena error=boom\n",
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    def fake_download_accession(accession, outdir, backend="ena", zip_output=True, logger=None):
+        calls.append((accession, outdir, backend, zip_output))
+        return []
+
+    monkeypatch.setattr(
+        "transcriptomics_pipeline.cli.download_accession",
+        fake_download_accession,
+    )
+
+    retry_failed_accessions(
+        outdir=tmp_path,
+        backend="fastq-dump",
+        zip_output=False,
+        log_path=log_path,
+    )
+
+    assert calls == [
+        ("SRR000001", tmp_path / "SRR000001", "fastq-dump", False),
+        ("SRR000003", tmp_path / "SRR000003", "fastq-dump", False),
     ]
