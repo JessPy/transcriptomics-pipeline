@@ -177,6 +177,7 @@ def _download_with_fastq_dump(
         text=True,
     )
     if result.returncode != 0:
+        # Return an informative RuntimeError but allow caller to handle fallback.
         raise RuntimeError(
             f"fastq-dump falhou para {accession}: {result.stderr.strip() or result.stdout.strip()}"
         )
@@ -216,12 +217,31 @@ def download_accession(
             )
 
         if backend.lower() == "fastq-dump":
-            return _download_with_fastq_dump(
-                accession,
-                outdir,
-                zip_output=zip_output,
-                logger=logger,
-            )
+            try:
+                return _download_with_fastq_dump(
+                    accession,
+                    outdir,
+                    zip_output=zip_output,
+                    logger=logger,
+                )
+            except Exception as fastq_error:
+                # Automatic fallback: try ENA if fastq-dump fails
+                if logger:
+                    logger.error(
+                        "FALLBACK fastq-dump failed for %s, trying ena: %s",
+                        accession,
+                        fastq_error,
+                    )
+                try:
+                    return _download_from_ena(
+                        accession,
+                        outdir,
+                        zip_output=zip_output,
+                        logger=logger,
+                    )
+                except Exception:
+                    # Re-raise the original fastq-dump error to preserve context
+                    raise
 
         raise ValueError("backend deve ser 'ena' ou 'fastq-dump'.")
     except Exception as error:

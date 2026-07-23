@@ -176,28 +176,39 @@ def resolve_bioproject(
 def batch(
     table: Path = TABLE_ARGUMENT,
     accession_column: str = ACCESSION_COLUMN_OPTION,
+    resume: list[str] | None = typer.Option(
+        None,
+        "--resume",
+        "-r",
+        help="Lista de accessions para rebaixar (substitui o arquivo de entrada).",
+    ),
     outdir: Path = OUTDIR_OPTION,
     backend: str = BACKEND_OPTION,
     zip_output: bool = ZIP_OUTPUT_OPTION,
 ):
-    """Lê uma tabela de amostras e baixa FASTQs para todas as accessions presentes."""
+    """Lê uma tabela de amostras e baixa FASTQs para todas as accessions presentes.
+    Se `--resume/-r` for informado, a lista passada será usada em vez do arquivo de entrada.
+    """
     outdir = ensure_directory(outdir)
     logger = configure_file_logger(outdir / DEFAULT_LOG_FILENAME, append=True)
     logger.info(
         "START batch table=%s backend=%s zip_output=%s",
-        table.name,
+        getattr(table, "name", str(table)),
         backend,
         zip_output,
     )
 
     try:
-        accessions = read_sample_accessions(table, accession_column)
+        if resume:
+            accessions = list(resume)
+        else:
+            accessions = read_sample_accessions(table, accession_column)
     except Exception as error:
-        console.print(f"[bold red]Erro ao ler a tabela:[/bold red] {error}")
+        console.print(f"[bold red]Erro ao ler a tabela ou lista de accessions:[/bold red] {error}")
         raise typer.Exit(code=1) from None
 
     console.print(
-        f"[bold blue]🔍 Encontradas {len(accessions)} accessions em {table.name}.[/bold blue]"
+        f"[bold blue]🔍 Preparando download de {len(accessions)} accessions.[/bold blue]"
     )
 
     if backend.lower() == "fastq-dump" and not has_fastq_dump():
