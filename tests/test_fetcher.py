@@ -1,10 +1,9 @@
-import zipfile
 from pathlib import Path
 
 import httpx
 import pytest
 
-from transcriptomics_pipeline.fetcher import _zip_files, fetch_fastq_urls
+from transcriptomics_pipeline.fetcher import _download_from_ena, fetch_fastq_urls
 
 
 def test_fetch_fastq_urls_parses_ftp_links(monkeypatch):
@@ -40,19 +39,25 @@ def test_fetch_fastq_urls_raises_when_no_fastq(monkeypatch):
         fetch_fastq_urls("SRR000000")
 
 
-def test_zip_files_creates_archive_and_removes_sources(tmp_path: Path):
-    file_a = tmp_path / "sample_1.fastq.gz"
-    file_b = tmp_path / "sample_2.fastq.gz"
-    file_a.write_text("dummy1", encoding="utf-8")
-    file_b.write_text("dummy2", encoding="utf-8")
+def test_download_from_ena_forces_gz(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "transcriptomics_pipeline.fetcher.fetch_fastq_urls",
+        lambda accession: ["https://example.com/SRR000001_1.fastq"],
+    )
 
-    archive_path = tmp_path / "SRR000001.zip"
-    zipped = _zip_files([file_a, file_b], archive_path)
+    def fake_download_file(url, dest_dir, progress):
+        path = dest_dir / "SRR000001_1.fastq"
+        path.write_bytes(b"dummy")
+        return path
 
-    assert zipped == archive_path
-    assert archive_path.exists()
-    assert not file_a.exists()
-    assert not file_b.exists()
+    monkeypatch.setattr(
+        "transcriptomics_pipeline.fetcher.download_file",
+        fake_download_file,
+    )
 
-    with zipfile.ZipFile(archive_path, "r") as archive:
-        assert sorted(archive.namelist()) == ["sample_1.fastq.gz", "sample_2.fastq.gz"]
+    files = _download_from_ena("SRR000001", tmp_path)
+
+    assert len(files) == 1
+    assert files[0].suffix == ".gz"
+    assert files[0].name == "SRR000001_1.fastq.gz"
+    assert files[0].exists()

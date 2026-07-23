@@ -25,8 +25,8 @@ def test_resolve_bioproject_downloads_runs(monkeypatch, tmp_path):
         lambda accession: ["SRR000001", "SRR000002"],
     )
 
-    def fake_download_accession(accession, outdir, backend="ena", zip_output=True, logger=None):
-        calls.append((accession, outdir, backend, zip_output))
+    def fake_download_accession(accession, outdir, backend="ena", logger=None):
+        calls.append((accession, outdir, backend))
         return []
 
     monkeypatch.setattr(
@@ -39,14 +39,13 @@ def test_resolve_bioproject_downloads_runs(monkeypatch, tmp_path):
         outdir=tmp_path,
         download=True,
         backend="ena",
-        zip_output=False,
     )
 
     assert result is None
     assert (tmp_path / "PRJNA123456_runs.txt").exists()
     assert calls == [
-        ("SRR000001", tmp_path / "SRR000001", "ena", False),
-        ("SRR000002", tmp_path / "SRR000002", "ena", False),
+        ("SRR000001", tmp_path / "SRR000001", "ena"),
+        ("SRR000002", tmp_path / "SRR000002", "ena"),
     ]
 
 
@@ -62,8 +61,8 @@ def test_retry_failed_accessions_uses_only_failures(monkeypatch, tmp_path):
 
     calls = []
 
-    def fake_download_accession(accession, outdir, backend="ena", zip_output=True, logger=None):
-        calls.append((accession, outdir, backend, zip_output))
+    def fake_download_accession(accession, outdir, backend="ena", logger=None):
+        calls.append((accession, outdir, backend))
         return []
 
     monkeypatch.setattr(
@@ -74,11 +73,10 @@ def test_retry_failed_accessions_uses_only_failures(monkeypatch, tmp_path):
     retry_failed_accessions(
         outdir=tmp_path,
         backend="fastq-dump",
-        zip_output=False,
         log_path=log_path,
     )
 
     assert calls == [
-        ("SRR000001", tmp_path / "SRR000001", "fastq-dump", False),
-        ("SRR000003", tmp_path / "SRR000003", "fastq-dump", False),
+        ("SRR000001", tmp_path / "SRR000001", "fastq-dump"),
+        ("SRR000003", tmp_path / "SRR000003", "fastq-dump"),
     ]
