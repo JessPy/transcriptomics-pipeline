@@ -35,17 +35,7 @@ Usando `fastq-dump` como backend:
 poetry run transcriptomics-pipeline download-unico SRR12345678 --backend fastq-dump -o data/raw
 ```
 
-Compactando o resultado em um `.zip` automaticamente:
-
-```bash
-poetry run transcriptomics-pipeline download-unico SRR12345678 -o data/raw --zip-output
-```
-
-Para manter os arquivos sem zip, use:
-
-```bash
-poetry run transcriptomics-pipeline download-unico SRR12345678 -o data/raw --no-zip-output
-```
+Os arquivos são salvos como `*.fastq.gz` (forçando gzip) e não são empacotados em `.zip`.
 
 Logs de amostras são gerados em `data/raw/sample_log.txt` por padrão. O arquivo contém:
 

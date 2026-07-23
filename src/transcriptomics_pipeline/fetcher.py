@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import gzip
 import logging
 import shutil
 import subprocess
-import zipfile
 from pathlib import Path
 
 import httpx
@@ -87,6 +87,17 @@ def fetch_run_accessions_for_bioproject(bioproject_accession: str) -> list[str]:
     return run_accessions
 
 
+def _gzip_file(file_path: Path) -> Path:
+    if file_path.suffix == ".gz":
+        return file_path
+
+    gz_path = file_path.with_suffix(file_path.suffix + ".gz")
+    with open(file_path, "rb") as source, gzip.open(gz_path, "wb") as target:
+        shutil.copyfileobj(source, target)
+    file_path.unlink()
+    return gz_path
+
+
 def download_file(url: str, dest_dir: Path, progress: Progress) -> Path:
     dest_dir.mkdir(parents=True, exist_ok=True)
     file_name = url.split("/")[-1]
@@ -108,25 +119,9 @@ def download_file(url: str, dest_dir: Path, progress: Progress) -> Path:
     return dest_path
 
 
-def _zip_files(files: list[Path], archive_path: Path) -> Path:
-    archive_path.parent.mkdir(parents=True, exist_ok=True)
-    if archive_path.exists():
-        archive_path.unlink()
-
-    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for file_path in files:
-            archive.write(file_path, arcname=file_path.name)
-
-    for file_path in files:
-        file_path.unlink()
-
-    return archive_path
-
-
 def _download_from_ena(
     accession: str,
     outdir: Path,
-    zip_output: bool = True,
     logger: logging.Logger | None = None,
 ) -> list[Path]:
     urls = fetch_fastq_urls(accession)
@@ -144,13 +139,7 @@ def _download_from_ena(
         for url in urls:
             files.append(download_file(url, outdir, progress))
 
-    if zip_output:
-        archive_path = outdir / f"{accession}.zip"
-        zipped = _zip_files(files, archive_path)
-        if logger:
-            log_sample_success(logger, accession, [zipped], backend="ena")
-        return [zipped]
-
+    files = [_gzip_file(path) for path in files]
     if logger:
         log_sample_success(logger, accession, files, backend="ena")
     return files
@@ -159,7 +148,6 @@ def _download_from_ena(
 def _download_with_fastq_dump(
     accession: str,
     outdir: Path,
-    zip_output: bool = True,
     logger: logging.Logger | None = None,
 ) -> list[Path]:
     program = _find_fastq_dump_program()
@@ -188,13 +176,6 @@ def _download_with_fastq_dump(
             f"fastq-dump não produziu arquivos de saída para {accession}."
         )
 
-    if zip_output:
-        archive_path = outdir / f"{accession}.zip"
-        zipped = _zip_files(files, archive_path)
-        if logger:
-            log_sample_success(logger, accession, [zipped], backend="fastq-dump")
-        return [zipped]
-
     if logger:
         log_sample_success(logger, accession, files, backend="fastq-dump")
     return files
@@ -204,7 +185,6 @@ def download_accession(
     accession: str,
     outdir: Path,
     backend: str = "ena",
-    zip_output: bool = True,
     logger: logging.Logger | None = None,
 ) -> list[Path]:
     try:
@@ -212,7 +192,6 @@ def download_accession(
             return _download_from_ena(
                 accession,
                 outdir,
-                zip_output=zip_output,
                 logger=logger,
             )
 
@@ -221,7 +200,6 @@ def download_accession(
                 return _download_with_fastq_dump(
                     accession,
                     outdir,
-                    zip_output=zip_output,
                     logger=logger,
                 )
             except Exception as fastq_error:
@@ -236,7 +214,6 @@ def download_accession(
                     return _download_from_ena(
                         accession,
                         outdir,
-                        zip_output=zip_output,
                         logger=logger,
                     )
                 except Exception:

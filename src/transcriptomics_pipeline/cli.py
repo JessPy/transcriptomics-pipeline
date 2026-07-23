@@ -63,11 +63,6 @@ ACCESSION_COLUMN_OPTION = typer.Option(
     "-c",
     help="Nome da coluna que contém as accessions no arquivo.",
 )
-ZIP_OUTPUT_OPTION = typer.Option(
-    True,
-    "--zip-output/--no-zip-output",
-    help="Compacta os resultados em um .zip e remove os arquivos intermediários.",
-)
 DOWNLOAD_OPTION = typer.Option(
     False,
     "--download/--no-download",
@@ -85,16 +80,14 @@ def download(
     accession: str = ACCESSION_ARG,
     outdir: Path = OUTDIR_OPTION,
     backend: str = BACKEND_OPTION,
-    zip_output: bool = ZIP_OUTPUT_OPTION,
 ):
     """Baixa FASTQ para uma accession única usando ENA ou fastq-dump."""
     outdir = ensure_directory(outdir)
     logger = configure_file_logger(outdir / DEFAULT_LOG_FILENAME, append=True)
     logger.info(
-        "START accession=%s backend=%s zip_output=%s",
+        "START accession=%s backend=%s",
         accession,
         backend,
-        zip_output,
     )
 
     try:
@@ -102,13 +95,11 @@ def download(
             accession,
             outdir,
             backend=backend,
-            zip_output=zip_output,
             logger=logger,
         )
-        archive_message = "arquivo zip" if zip_output else "arquivos brutos"
         console.print(
             f"[bold green]✔ Downloads concluídos para {accession}." \
-            f" {archive_message.capitalize()} salvos em [underline]{outdir.resolve()}[/underline]."
+            f" Arquivos salvos em [underline]{outdir.resolve()}[/underline]."
         )
     except Exception as error:
         console.print(f"[bold red]Erro:[/bold red] {error}")
@@ -124,16 +115,14 @@ def resolve_bioproject(
     outdir: Path = RESOLVE_OUTDIR_OPTION,
     download: bool = DOWNLOAD_OPTION,
     backend: str = BACKEND_OPTION,
-    zip_output: bool = ZIP_OUTPUT_OPTION,
 ):
     """Resolve um BioProject em uma lista de SRRs via API da ENA."""
     outdir = ensure_directory(outdir)
     logger = configure_file_logger(outdir / DEFAULT_LOG_FILENAME, append=True)
     logger.info(
-        "START resolve_bioproject accession=%s backend=%s zip_output=%s",
+        "START resolve_bioproject accession=%s backend=%s",
         bioproject,
         backend,
-        zip_output,
     )
     try:
         run_accessions = fetch_run_accessions_for_bioproject(bioproject)
@@ -160,7 +149,6 @@ def resolve_bioproject(
                 accession,
                 sample_dir,
                 backend=backend,
-                zip_output=zip_output,
                 logger=logger,
             )
             success_count += 1
@@ -184,7 +172,6 @@ def batch(
     ),
     outdir: Path = OUTDIR_OPTION,
     backend: str = BACKEND_OPTION,
-    zip_output: bool = ZIP_OUTPUT_OPTION,
 ):
     """Lê uma tabela de amostras e baixa FASTQs para todas as accessions presentes.
     Se `--resume/-r` for informado, a lista passada será usada em vez do arquivo de entrada.
@@ -192,10 +179,9 @@ def batch(
     outdir = ensure_directory(outdir)
     logger = configure_file_logger(outdir / DEFAULT_LOG_FILENAME, append=True)
     logger.info(
-        "START batch table=%s backend=%s zip_output=%s",
+        "START batch table=%s backend=%s",
         getattr(table, "name", str(table)),
         backend,
-        zip_output,
     )
 
     try:
@@ -227,7 +213,6 @@ def batch(
                 accession,
                 sample_dir,
                 backend=backend,
-                zip_output=zip_output,
                 logger=logger,
             )
             success_count += 1
@@ -245,7 +230,6 @@ def batch(
 def retry_failed_accessions(
     outdir: Path = OUTDIR_OPTION,
     backend: str = BACKEND_OPTION,
-    zip_output: bool = ZIP_OUTPUT_OPTION,
     log_path: Path | None = LOG_FILE_OPTION,
 ):
     """Reprocessa apenas as accessions marcadas como falha no log de execução."""
@@ -263,9 +247,8 @@ def retry_failed_accessions(
 
     logger = configure_file_logger(log_file, append=True)
     logger.info(
-        "RETRY start backend=%s zip_output=%s failed_count=%d",
+        "RETRY start backend=%s failed_count=%d",
         backend,
-        zip_output,
         len(failed_accessions),
     )
 
@@ -278,7 +261,6 @@ def retry_failed_accessions(
                 accession,
                 sample_dir,
                 backend=backend,
-                zip_output=zip_output,
                 logger=logger,
             )
             success_count += 1
